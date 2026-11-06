@@ -1,0 +1,262 @@
+metadata:
+  name: "4-Layer Global SD-WAN: Optical/ISP Transport → MPLS & IPSec → SD-WAN Fabric → App VRFs"
+  version: "1.0"
+  description: >
+    Demonstrates explicit traffic-engineered underlay pinning: Voice/Realtime rides dedicated
+    MPLS optical circuits while Bulk Analytics uses Broadband IPSec, and Critical ERP uses active/standby dual-transport.
+  tags:
+    - wan
+    - sd-wan
+    - mpls
+    - traffic-engineering
+
+layers:
+  - id: transport
+    name: "L0 · Physical Optical & ISP Circuits"
+    order: 0
+    kind: physical
+    color: "#38bdf8"
+    description: "CPE routers, carrier POPs, dark fiber / MPLS circuits, and broadband links"
+
+  - id: wan-underlay
+    name: "L1 · Carrier MPLS & Internet Underlay"
+    order: 1
+    kind: underlay
+    color: "#34d399"
+    description: "SLA-backed MPLS L3VPN vs Best-Effort DIA Internet transit"
+
+  - id: sdwan-fabric
+    name: "L2 · SD-WAN IPSec / GENEVE Tunnels"
+    order: 2
+    kind: overlay
+    color: "#fbbf24"
+    description: "BFD-monitored encrypted SD-WAN tunnels pinned to specific carrier transports"
+
+  - id: app-segments
+    name: "L3 · Enterprise Application VRFs"
+    order: 3
+    kind: service
+    color: "#f472b6"
+    description: "Segmented business traffic flows (Realtime Voice, Core ERP, Bulk Replication)"
+
+groups:
+  - id: pop-nyc
+    name: "HQ · New York"
+    type: site
+    color: "#0ea5e9"
+
+  - id: pop-lon
+    name: "Branch · London"
+    type: site
+    color: "#14b8a6"
+
+  - id: carriers
+    name: "Carrier Transit Core"
+    type: zone
+    color: "#64748b"
+
+nodes:
+  # L0 Physical
+  - id: nyc-cpe-1
+    label: "nyc-wan-edge-01"
+    layer: transport
+    type: router
+    role: leaf
+    group: pop-nyc
+    metadata:
+      vendor: "Cisco Catalyst 8500"
+
+  - id: lon-cpe-1
+    label: "lon-wan-edge-01"
+    layer: transport
+    type: router
+    role: leaf
+    group: pop-lon
+    metadata:
+      vendor: "Cisco Catalyst 8300"
+
+  - id: carrier-mpls-pe
+    label: "Tier1-MPLS-Core"
+    layer: transport
+    type: switch
+    role: spine
+    group: carriers
+    metadata:
+      sla: "99.999% <68ms"
+
+  - id: carrier-inet-ixp
+    label: "Transatlantic-IXP"
+    layer: transport
+    type: switch
+    role: spine
+    group: carriers
+    metadata:
+      sla: "Best Effort"
+
+  # L1 Underlay
+  - id: ul-nyc-edge
+    label: "NYC-Transport-VRFs"
+    layer: wan-underlay
+    type: router
+    hostedOn: nyc-cpe-1
+
+  - id: ul-lon-edge
+    label: "LON-Transport-VRFs"
+    layer: wan-underlay
+    type: router
+    hostedOn: lon-cpe-1
+
+  - id: ul-mpls-cloud
+    label: "MPLS-L3VPN-AS3356"
+    layer: wan-underlay
+    type: router
+    role: spine
+    hostedOn: carrier-mpls-pe
+
+  - id: ul-dia-cloud
+    label: "Public-Internet-DIA"
+    layer: wan-underlay
+    type: router
+    role: spine
+    hostedOn: carrier-inet-ixp
+
+  # L2 SD-WAN Overlay
+  - id: sdwan-nyc
+    label: "vEdge-NYC"
+    layer: sdwan-fabric
+    type: gateway
+    hostedOn: ul-nyc-edge
+    metadata:
+      systemIp: "172.16.0.1"
+
+  - id: sdwan-lon
+    label: "vEdge-LON"
+    layer: sdwan-fabric
+    type: gateway
+    hostedOn: ul-lon-edge
+    metadata:
+      systemIp: "172.16.0.2"
+
+  # L3 Enterprise App Segments
+  - id: app-nyc-erp
+    label: "SAP-Core-NYC"
+    layer: app-segments
+    type: service
+    hostedOn: sdwan-nyc
+
+  - id: app-lon-erp
+    label: "SAP-Client-LON"
+    layer: app-segments
+    type: service
+    hostedOn: sdwan-lon
+
+  - id: app-nyc-voice
+    label: "SIP-PBX-NYC"
+    layer: app-segments
+    type: service
+    hostedOn: sdwan-nyc
+
+  - id: app-lon-voice
+    label: "SIP-Phones-LON"
+    layer: app-segments
+    type: service
+    hostedOn: sdwan-lon
+
+links:
+  # L0 Physical Circuits
+  - id: ckt-nyc-mpls
+    label: "10G Wave MPLS"
+    layer: transport
+    source: nyc-cpe-1
+    target: carrier-mpls-pe
+    bandwidth: "10Gbps"
+
+  - id: ckt-lon-mpls
+    label: "10G Wave MPLS"
+    layer: transport
+    source: lon-cpe-1
+    target: carrier-mpls-pe
+    bandwidth: "10Gbps"
+
+  - id: ckt-nyc-dia
+    label: "20G Broadband DIA"
+    layer: transport
+    source: nyc-cpe-1
+    target: carrier-inet-ixp
+    bandwidth: "20Gbps"
+
+  - id: ckt-lon-dia
+    label: "10G Broadband DIA"
+    layer: transport
+    source: lon-cpe-1
+    target: carrier-inet-ixp
+    bandwidth: "10Gbps"
+
+  # L1 Underlay Paths
+  - id: mpls-leg-nyc
+    label: "BGP MPLS PE"
+    layer: wan-underlay
+    source: ul-nyc-edge
+    target: ul-mpls-cloud
+    carriedBy: ckt-nyc-mpls
+
+  - id: mpls-leg-lon
+    label: "BGP MPLS PE"
+    layer: wan-underlay
+    source: ul-lon-edge
+    target: ul-mpls-cloud
+    carriedBy: ckt-lon-mpls
+
+  - id: dia-leg-nyc
+    label: "DIA Default Route"
+    layer: wan-underlay
+    source: ul-nyc-edge
+    target: ul-dia-cloud
+    carriedBy: ckt-nyc-dia
+
+  - id: dia-leg-lon
+    label: "DIA Default Route"
+    layer: wan-underlay
+    source: ul-lon-edge
+    target: ul-dia-cloud
+    carriedBy: ckt-lon-dia
+
+  # L2 SD-WAN Color-Pinned Tunnels
+  - id: tun-gold-mpls
+    label: "IPSec Color: GOLD (MPLS)"
+    layer: sdwan-fabric
+    source: sdwan-nyc
+    target: sdwan-lon
+    encapsulation: "IPSec ESP AES-256"
+    carriedBy:
+      - mpls-leg-nyc
+      - mpls-leg-lon
+
+  - id: tun-bronze-inet
+    label: "IPSec Color: BRONZE (Biz-Internet)"
+    layer: sdwan-fabric
+    source: sdwan-nyc
+    target: sdwan-lon
+    encapsulation: "IPSec ESP UDP/4500"
+    carriedBy:
+      - dia-leg-nyc
+      - dia-leg-lon
+
+  # L3 Application Flows
+  - id: flow-voice-rtp
+    label: "EF DSCP46 Voice RTP"
+    layer: app-segments
+    source: app-nyc-voice
+    target: app-lon-voice
+    encapsulation: "SRTP (Pinned to Gold)"
+    carriedBy: tun-gold-mpls
+
+  - id: flow-sap-erp
+    label: "Critical ERP (Dual-Tunnel SLA)"
+    layer: app-segments
+    source: app-nyc-erp
+    target: app-lon-erp
+    encapsulation: "App-Route ECMP"
+    carriedBy:
+      - tun-gold-mpls
+      - tun-bronze-inet

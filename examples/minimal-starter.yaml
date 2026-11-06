@@ -1,0 +1,137 @@
+# Minimal 3-Layer NetViz Starter Topology
+# Shows how `hostedOn` automatically resolves overlay paths down to physical switches & links.
+
+metadata:
+  name: "3-Layer Starter: Physical → VXLAN Overlay → App Tier"
+  version: "1.0"
+  description: "Minimal template showing automatic underlay path resolution via hostedOn."
+
+layers:
+  - id: physical
+    name: "L0 · Physical Switches & Hosts"
+    order: 0
+    color: "#38bdf8"
+
+  - id: overlay
+    name: "L1 · VXLAN Virtual Network"
+    order: 1
+    color: "#a78bfa"
+
+  - id: app
+    name: "L2 · Application Services"
+    order: 2
+    color: "#f472b6"
+
+groups:
+  - id: rack-a
+    name: "Rack A"
+    type: rack
+    layer: physical
+  - id: rack-b
+    name: "Rack B"
+    type: rack
+    layer: physical
+
+nodes:
+  # L0 Physical
+  - id: core-sw
+    label: "core-switch"
+    layer: physical
+    type: switch
+    role: spine
+
+  - id: tor-a
+    label: "tor-switch-a"
+    layer: physical
+    type: switch
+    role: leaf
+    group: rack-a
+
+  - id: tor-b
+    label: "tor-switch-b"
+    layer: physical
+    type: switch
+    role: leaf
+    group: rack-b
+
+  - id: host-a
+    label: "hypervisor-a"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-a
+
+  - id: host-b
+    label: "hypervisor-b"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-b
+
+  # L1 Overlay VMs (hosted on physical hypervisors)
+  - id: vm-web
+    label: "vm-frontend"
+    layer: overlay
+    type: vm
+    hostedOn: host-a
+
+  - id: vm-db
+    label: "vm-postgres"
+    layer: overlay
+    type: vm
+    hostedOn: host-b
+
+  # L2 App Containers (hosted on VMs)
+  - id: web-app
+    label: "nginx-frontend"
+    layer: app
+    type: service
+    hostedOn: vm-web
+
+  - id: db-svc
+    label: "postgres-primary"
+    layer: app
+    type: database
+    hostedOn: vm-db
+
+links:
+  # Physical links
+  - id: link-ha-tora
+    layer: physical
+    source: host-a
+    target: tor-a
+    bandwidth: "25Gbps"
+
+  - id: link-tora-core
+    layer: physical
+    source: tor-a
+    target: core-sw
+    bandwidth: "100Gbps"
+
+  - id: link-torb-core
+    layer: physical
+    source: tor-b
+    target: core-sw
+    bandwidth: "100Gbps"
+
+  - id: link-hb-torb
+    layer: physical
+    source: host-b
+    target: tor-b
+    bandwidth: "25Gbps"
+
+  # Overlay tunnel (auto-resolves: host-a -> tor-a -> core-sw -> tor-b -> host-b!)
+  - id: vxlan-tun
+    label: "VXLAN VNI 100"
+    layer: overlay
+    source: vm-web
+    target: vm-db
+    encapsulation: "VXLAN"
+
+  # Application connection (auto-resolves through vxlan-tun down to physical!)
+  - id: app-sql
+    label: "TCP :5432"
+    layer: app
+    source: web-app
+    target: db-svc
+    encapsulation: "TLS 1.3"

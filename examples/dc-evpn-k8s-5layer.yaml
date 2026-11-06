@@ -1,0 +1,639 @@
+metadata:
+  name: "5-Layer Cloud-Native DC: Physical Clos → eBGP → EVPN/VXLAN → K8s CNI → Service Mesh"
+  version: "1.0"
+  description: >
+    Multi-layered datacenter topology combining physical racks, dual-spine 400G fiber,
+    eBGP ECMP underlay, EVPN/VXLAN fabric tunnels, Kubernetes Cilium/WireGuard overlay,
+    and Istio mTLS application microservices.
+  tags:
+    - datacenter
+    - evpn-vxlan
+    - kubernetes
+    - service-mesh
+    - ecmp
+
+layers:
+  - id: physical
+    name: "L0 · Physical Infrastructure"
+    order: 0
+    kind: physical
+    color: "#38bdf8"
+    description: "Racks, Spine/Leaf ASICs, bare-metal servers, and 100G/400G optical fibers"
+
+  - id: underlay
+    name: "L1 · eBGP IP Underlay"
+    order: 1
+    kind: underlay
+    color: "#34d399"
+    description: "Unnumbered point-to-point eBGP sessions providing ECMP loopback reachability"
+
+  - id: evpn-overlay
+    name: "L2 · EVPN / VXLAN Fabric"
+    order: 2
+    kind: overlay
+    color: "#a78bfa"
+    description: "Hardware VTEPs encapsulating tenant L2/L3 VRF traffic in VXLAN (UDP/4789)"
+
+  - id: k8s-cni
+    name: "L3 · Kubernetes CNI Overlay"
+    order: 3
+    kind: overlay
+    color: "#fbbf24"
+    description: "Cilium Geneve + WireGuard encrypted pod-network mesh across worker nodes"
+
+  - id: service-mesh
+    name: "L4 · Service Mesh (mTLS)"
+    order: 4
+    kind: service
+    color: "#f472b6"
+    description: "Application microservices communicating over Envoy mTLS / gRPC"
+
+groups:
+  - id: site-dc1
+    name: "AZ-1 · Frankfurt West"
+    type: site
+    color: "#0ea5e9"
+    description: "Primary availability zone"
+
+  - id: rack-101
+    name: "Rack 101 (Compute)"
+    type: rack
+    parent: site-dc1
+    layer: physical
+    color: "#38bdf8"
+
+  - id: rack-102
+    name: "Rack 102 (Compute)"
+    type: rack
+    parent: site-dc1
+    layer: physical
+    color: "#38bdf8"
+
+  - id: site-dc2
+    name: "AZ-2 · Frankfurt East"
+    type: site
+    color: "#14b8a6"
+    description: "Secondary availability zone (stateful & DR)"
+
+  - id: rack-201
+    name: "Rack 201 (Storage & DB)"
+    type: rack
+    parent: site-dc2
+    layer: physical
+    color: "#2dd4bf"
+
+  - id: ns-checkout
+    name: "ns: checkout-prod"
+    type: namespace
+    layer: service-mesh
+    color: "#f472b6"
+
+  - id: ns-core-banking
+    name: "ns: core-ledger"
+    type: namespace
+    layer: service-mesh
+    color: "#e879f9"
+
+nodes:
+  # ─────────────────── L0: PHYSICAL INFRASTRUCTURE ───────────────────
+  - id: spine-01
+    label: "spine-01"
+    layer: physical
+    type: switch
+    role: spine
+    group: site-dc1
+    metadata:
+      model: "Arista 7060X5-64S"
+      capacity: "25.6 Tbps"
+      serial: "SN-SP01-992A"
+
+  - id: spine-02
+    label: "spine-02"
+    layer: physical
+    type: switch
+    role: spine
+    group: site-dc2
+    metadata:
+      model: "Arista 7060X5-64S"
+      capacity: "25.6 Tbps"
+      serial: "SN-SP02-992B"
+
+  - id: leaf-101
+    label: "leaf-tor-101"
+    layer: physical
+    type: switch
+    role: leaf
+    group: rack-101
+    metadata:
+      model: "Arista 7050X4"
+      rackUnit: "RU42"
+
+  - id: leaf-102
+    label: "leaf-tor-102"
+    layer: physical
+    type: switch
+    role: leaf
+    group: rack-102
+    metadata:
+      model: "Arista 7050X4"
+      rackUnit: "RU42"
+
+  - id: leaf-201
+    label: "leaf-tor-201"
+    layer: physical
+    type: switch
+    role: leaf
+    group: rack-201
+    metadata:
+      model: "Arista 7050X4"
+      rackUnit: "RU42"
+
+  - id: srv-101a
+    label: "bm-srv-101a"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-101
+    metadata:
+      cpu: "2x EPYC 9654"
+      nic: "ConnectX-7 100G"
+      rackUnit: "RU10"
+
+  - id: srv-101b
+    label: "bm-srv-101b"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-101
+    metadata:
+      cpu: "2x EPYC 9654"
+      nic: "ConnectX-7 100G"
+      rackUnit: "RU12"
+
+  - id: srv-102a
+    label: "bm-srv-102a"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-102
+    metadata:
+      cpu: "2x EPYC 9654"
+      nic: "ConnectX-7 100G"
+      rackUnit: "RU10"
+
+  - id: srv-201a
+    label: "bm-srv-201a"
+    layer: physical
+    type: server
+    role: compute
+    group: rack-201
+    metadata:
+      cpu: "2x EPYC 9654 + NVMe"
+      nic: "Dual-Port 100G"
+      rackUnit: "RU08"
+
+  # ─────────────────── L1: eBGP IP UNDERLAY ───────────────────
+  - id: bgp-spine-01
+    label: "AS65000 · spine-01"
+    layer: underlay
+    type: router
+    role: spine
+    hostedOn: spine-01
+    metadata:
+      asn: 65000
+      routerId: "10.0.255.1"
+
+  - id: bgp-spine-02
+    label: "AS65000 · spine-02"
+    layer: underlay
+    type: router
+    role: spine
+    hostedOn: spine-02
+    metadata:
+      asn: 65000
+      routerId: "10.0.255.2"
+
+  - id: bgp-leaf-101
+    label: "AS65101 · leaf-101"
+    layer: underlay
+    type: router
+    role: leaf
+    hostedOn: leaf-101
+    metadata:
+      asn: 65101
+      loopback0: "10.0.1.101/32"
+
+  - id: bgp-leaf-102
+    label: "AS65102 · leaf-102"
+    layer: underlay
+    type: router
+    role: leaf
+    hostedOn: leaf-102
+    metadata:
+      asn: 65102
+      loopback0: "10.0.1.102/32"
+
+  - id: bgp-leaf-201
+    label: "AS65201 · leaf-201"
+    layer: underlay
+    type: router
+    role: leaf
+    hostedOn: leaf-201
+    metadata:
+      asn: 65201
+      loopback0: "10.0.2.201/32"
+
+  # ─────────────────── L2: EVPN / VXLAN FABRIC OVERLAY ───────────────────
+  - id: vtep-101
+    label: "VTEP-101"
+    layer: evpn-overlay
+    type: vtep
+    role: leaf
+    hostedOn: bgp-leaf-101
+    metadata:
+      vtepIp: "10.0.100.101"
+      l3Vni: 50001
+      vrf: "PROD-TENANT"
+
+  - id: vtep-102
+    label: "VTEP-102"
+    layer: evpn-overlay
+    type: vtep
+    role: leaf
+    hostedOn: bgp-leaf-102
+    metadata:
+      vtepIp: "10.0.100.102"
+      l3Vni: 50001
+      vrf: "PROD-TENANT"
+
+  - id: vtep-201
+    label: "VTEP-201"
+    layer: evpn-overlay
+    type: vtep
+    role: leaf
+    hostedOn: bgp-leaf-201
+    metadata:
+      vtepIp: "10.0.100.201"
+      l3Vni: 50001
+      vrf: "PROD-TENANT"
+
+  # ─────────────────── L3: KUBERNETES CNI OVERLAY ───────────────────
+  - id: k8s-ingress-1
+    label: "k8s-edge-101a"
+    layer: k8s-cni
+    type: k8s-node
+    role: gateway
+    hostedOn: srv-101a
+    metadata:
+      podCidr: "100.64.1.0/24"
+      cni: "Cilium 1.17 (WireGuard)"
+
+  - id: k8s-worker-1
+    label: "k8s-work-101b"
+    layer: k8s-cni
+    type: k8s-node
+    role: worker
+    hostedOn: srv-101b
+    metadata:
+      podCidr: "100.64.2.0/24"
+      cni: "Cilium 1.17 (WireGuard)"
+
+  - id: k8s-worker-2
+    label: "k8s-work-102a"
+    layer: k8s-cni
+    type: k8s-node
+    role: worker
+    hostedOn: srv-102a
+    metadata:
+      podCidr: "100.64.3.0/24"
+      cni: "Cilium 1.17 (WireGuard)"
+
+  - id: k8s-dbnode-1
+    label: "k8s-data-201a"
+    layer: k8s-cni
+    type: k8s-node
+    role: worker
+    hostedOn: srv-201a
+    metadata:
+      podCidr: "100.64.9.0/24"
+      cni: "Cilium 1.17 (WireGuard)"
+
+  # ─────────────────── L4: SERVICE MESH (APPLICATION LAYER) ───────────────────
+  - id: svc-api-gw
+    label: "edge-envoy-gw"
+    layer: service-mesh
+    type: gateway
+    role: gateway
+    group: ns-checkout
+    hostedOn: k8s-ingress-1
+    metadata:
+      protocol: "HTTPS / HTTP3"
+      vip: "198.51.100.10"
+
+  - id: svc-checkout
+    label: "checkout-api"
+    layer: service-mesh
+    type: service
+    role: service
+    group: ns-checkout
+    hostedOn: k8s-worker-1
+    metadata:
+      protocol: "gRPC mTLS"
+      spiffe: "spiffe://prod/ns/checkout/sa/api"
+
+  - id: svc-fraud
+    label: "fraud-scorer"
+    layer: service-mesh
+    type: service
+    role: service
+    group: ns-checkout
+    hostedOn: k8s-worker-2
+    metadata:
+      protocol: "gRPC mTLS"
+      gpuAccelerated: true
+
+  - id: svc-payment
+    label: "payment-router"
+    layer: service-mesh
+    type: service
+    role: service
+    group: ns-core-banking
+    hostedOn: k8s-worker-2
+    metadata:
+      protocol: "gRPC mTLS"
+      pciScope: "PCI-DSS L1"
+
+  - id: svc-ledger
+    label: "cockroach-ledger"
+    layer: service-mesh
+    type: database
+    role: service
+    group: ns-core-banking
+    hostedOn:
+      - k8s-dbnode-1
+      - k8s-worker-1
+    metadata:
+      protocol: "PostgreSQL TLS"
+      replication: "Raft Multi-AZ"
+
+links:
+  # ─────────────────── L0: PHYSICAL FIBERS & DACs ───────────────────
+  - id: phy-l101-sp01
+    label: "400G-LR4"
+    layer: physical
+    source: leaf-101
+    target: spine-01
+    sourcePort: "Eth49/1"
+    targetPort: "Eth1/1"
+    type: fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-l101-sp02
+    label: "400G-LR4"
+    layer: physical
+    source: leaf-101
+    target: spine-02
+    sourcePort: "Eth50/1"
+    targetPort: "Eth1/1"
+    type: fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-l102-sp01
+    label: "400G-LR4"
+    layer: physical
+    source: leaf-102
+    target: spine-01
+    sourcePort: "Eth49/1"
+    targetPort: "Eth2/1"
+    type: fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-l102-sp02
+    label: "400G-LR4"
+    layer: physical
+    source: leaf-102
+    target: spine-02
+    sourcePort: "Eth50/1"
+    targetPort: "Eth2/1"
+    type: fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-l201-sp01
+    label: "400G-ZR (DWDM)"
+    layer: physical
+    source: leaf-201
+    target: spine-01
+    sourcePort: "Eth49/1"
+    targetPort: "Eth8/1"
+    type: dwdm-fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-l201-sp02
+    label: "400G-ZR (DWDM)"
+    layer: physical
+    source: leaf-201
+    target: spine-02
+    sourcePort: "Eth50/1"
+    targetPort: "Eth8/1"
+    type: dwdm-fiber
+    bandwidth: "400Gbps"
+
+  - id: phy-srv101a-l101
+    label: "100G-DAC"
+    layer: physical
+    source: srv-101a
+    target: leaf-101
+    sourcePort: "ens1f0"
+    targetPort: "Eth1/1"
+    type: dac
+    bandwidth: "100Gbps"
+
+  - id: phy-srv101b-l101
+    label: "100G-DAC"
+    layer: physical
+    source: srv-101b
+    target: leaf-101
+    sourcePort: "ens1f0"
+    targetPort: "Eth2/1"
+    type: dac
+    bandwidth: "100Gbps"
+
+  - id: phy-srv102a-l102
+    label: "100G-DAC"
+    layer: physical
+    source: srv-102a
+    target: leaf-102
+    sourcePort: "ens1f0"
+    targetPort: "Eth1/1"
+    type: dac
+    bandwidth: "100Gbps"
+
+  - id: phy-srv201a-l201
+    label: "100G-AOC"
+    layer: physical
+    source: srv-201a
+    target: leaf-201
+    sourcePort: "ens1f0"
+    targetPort: "Eth1/1"
+    type: fiber
+    bandwidth: "100Gbps"
+
+  # ─────────────────── L1: eBGP POINT-TO-POINT SESSIONS ───────────────────
+  - id: bgp-101-sp01
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-101
+    target: bgp-spine-01
+    type: ebgp
+    carriedBy: phy-l101-sp01
+
+  - id: bgp-101-sp02
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-101
+    target: bgp-spine-02
+    type: ebgp
+    carriedBy: phy-l101-sp02
+
+  - id: bgp-102-sp01
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-102
+    target: bgp-spine-01
+    type: ebgp
+    carriedBy: phy-l102-sp01
+
+  - id: bgp-102-sp02
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-102
+    target: bgp-spine-02
+    type: ebgp
+    carriedBy: phy-l102-sp02
+
+  - id: bgp-201-sp01
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-201
+    target: bgp-spine-01
+    type: ebgp
+    carriedBy: phy-l201-sp01
+
+  - id: bgp-201-sp02
+    label: "eBGP IPv6 LLA"
+    layer: underlay
+    source: bgp-leaf-201
+    target: bgp-spine-02
+    type: ebgp
+    carriedBy: phy-l201-sp02
+
+  # ─────────────────── L2: EVPN / VXLAN TUNNELS (AUTO-RESOLVED ECMP OVER eBGP) ───────────────────
+  - id: vxlan-101-102
+    label: "VNI 50001"
+    layer: evpn-overlay
+    source: vtep-101
+    target: vtep-102
+    type: vxlan
+    encapsulation: "VXLAN UDP/4789"
+    # Auto-resolves dual ECMP paths over bgp-spine-01 & bgp-spine-02 → physical 400G fibers!
+
+  - id: vxlan-101-201
+    label: "VNI 50001 (Cross-AZ)"
+    layer: evpn-overlay
+    source: vtep-101
+    target: vtep-201
+    type: vxlan
+    encapsulation: "VXLAN UDP/4789"
+
+  - id: vxlan-102-201
+    label: "VNI 50001 (Cross-AZ)"
+    layer: evpn-overlay
+    source: vtep-102
+    target: vtep-201
+    type: vxlan
+    encapsulation: "VXLAN UDP/4789"
+
+  # ─────────────────── L3: KUBERNETES CILIUM CNI TUNNELS ───────────────────
+  - id: cni-ing1-work1
+    label: "Geneve+WG (Intra-Rack)"
+    layer: k8s-cni
+    source: k8s-ingress-1
+    target: k8s-worker-1
+    type: wireguard
+    encapsulation: "Geneve + WireGuard"
+    carriedBy:
+      - phy-srv101a-l101
+      - phy-srv101b-l101
+
+  - id: cni-work1-work2
+    label: "Geneve+WG"
+    layer: k8s-cni
+    source: k8s-worker-1
+    target: k8s-worker-2
+    type: wireguard
+    encapsulation: "Geneve + WireGuard"
+    carriedBy:
+      - phy-srv101b-l101
+      - vxlan-101-102
+      - phy-srv102a-l102
+
+  - id: cni-work2-db1
+    label: "Geneve+WG (Cross-AZ)"
+    layer: k8s-cni
+    source: k8s-worker-2
+    target: k8s-dbnode-1
+    type: wireguard
+    encapsulation: "Geneve + WireGuard"
+    carriedBy:
+      - phy-srv102a-l102
+      - vxlan-102-201
+      - phy-srv201a-l201
+
+  - id: cni-work1-db1
+    label: "Geneve+WG (Cross-AZ)"
+    layer: k8s-cni
+    source: k8s-worker-1
+    target: k8s-dbnode-1
+    type: wireguard
+    encapsulation: "Geneve + WireGuard"
+    carriedBy:
+      - phy-srv101b-l101
+      - vxlan-101-201
+      - phy-srv201a-l201
+
+  # ─────────────────── L4: SERVICE MESH mTLS FLOWS ───────────────────
+  - id: mesh-gw-checkout
+    label: "gRPC :8443"
+    layer: service-mesh
+    source: svc-api-gw
+    target: svc-checkout
+    type: mtls
+    encapsulation: "Envoy mTLS"
+    carriedBy: cni-ing1-work1
+
+  - id: mesh-checkout-fraud
+    label: "ScoreTx RPC"
+    layer: service-mesh
+    source: svc-checkout
+    target: svc-fraud
+    type: mtls
+    encapsulation: "Envoy mTLS"
+    carriedBy: cni-work1-work2
+
+  - id: mesh-checkout-payment
+    label: "Authorize RPC"
+    layer: service-mesh
+    source: svc-checkout
+    target: svc-payment
+    type: mtls
+    encapsulation: "Envoy mTLS"
+    carriedBy: cni-work1-work2
+
+  - id: mesh-payment-ledger
+    label: "CommitSQL TLS"
+    layer: service-mesh
+    source: svc-payment
+    target: svc-ledger
+    type: mtls
+    encapsulation: "SQL over mTLS"
+    carriedBy: cni-work2-db1
