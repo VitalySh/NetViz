@@ -451,24 +451,45 @@ export const Graph3DView: React.FC<Graph3DViewProps> = ({
       const isBlast = trace.blastRenderLinkIds.has(rl.id);
       const dimmed = trace.hasSelection && !isSelected && !isUnderlay && !isBlast;
 
-      // Parallel offset in X-Z plane
-      const dx = tp.x - sp.x;
-      const dz = tp.z - sp.z;
-      const len = Math.hypot(dx, dz) || 1;
-      const nx = -dz / len;
-      const nz = dx / len;
-      const lateral =
-        rl.parallelCount > 1 ? (rl.parallelIndex - (rl.parallelCount - 1) / 2) * 14 : 0;
+      const route = layout.linkRoutes.get(rl.id);
+      let curve: THREE.Curve<THREE.Vector3>;
 
-      const mid = new THREE.Vector3(
-        (sp.x + tp.x) / 2 + nx * lateral,
-        (sp.y + tp.y) / 2 + (rl.parallelCount > 1 ? 2.5 : 0.5),
-        (sp.z + tp.z) / 2 + nz * lateral
-      );
+      if (route?.sameRow && Math.abs(sp.z - tp.z) < 6 && route.arcTrack !== 0) {
+        // Non-overlapping horizontal arc in Z-plane so skip-links never pierce middle 3D nodes!
+        const sign = Math.sign(route.arcTrack);
+        const level = Math.abs(route.arcTrack);
+        const apexZ = sp.z - sign * (18 + (level - 1) * 14);
+        const apexY = (sp.y + tp.y) / 2 + 2.5 + level * 1.4;
+        const span = Math.abs(tp.x - sp.x);
+        const shoulder = Math.min(20, span * 0.2);
+        const dir = tp.x >= sp.x ? 1 : -1;
 
-      const curve = new THREE.QuadraticBezierCurve3(sp, mid, tp);
+        curve = new THREE.CubicBezierCurve3(
+          sp,
+          new THREE.Vector3(sp.x + dir * shoulder, apexY, apexZ),
+          new THREE.Vector3(tp.x - dir * shoulder, apexY, apexZ),
+          tp
+        );
+      } else {
+        // Direct neighbor or cross-row link
+        const dx = tp.x - sp.x;
+        const dz = tp.z - sp.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const nx = -dz / len;
+        const nz = dx / len;
+        const lateral =
+          rl.parallelCount > 1 ? (rl.parallelIndex - (rl.parallelCount - 1) / 2) * 14 : 0;
+
+        const mid = new THREE.Vector3(
+          (sp.x + tp.x) / 2 + nx * lateral,
+          (sp.y + tp.y) / 2 + (rl.parallelCount > 1 ? 2.5 : 0.5),
+          (sp.z + tp.z) / 2 + nz * lateral
+        );
+        curve = new THREE.QuadraticBezierCurve3(sp, mid, tp);
+      }
+
       const radius = isSelected ? 2.1 : isUnderlay || isBlast ? 1.75 : 1.05;
-      const tubeGeo = new THREE.TubeGeometry(curve, 20, radius, 8, false);
+      const tubeGeo = new THREE.TubeGeometry(curve, 24, radius, 8, false);
 
       let colorHex = layerColorMap.get(rl.layer) ?? '#94a3b8';
       if (rl.health.status === 'down') colorHex = '#ef4444';

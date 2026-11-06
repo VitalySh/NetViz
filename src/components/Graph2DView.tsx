@@ -191,14 +191,25 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
     for (const rn of folded.nodes) {
       const p = layout.positions.get(rn.id);
       if (!p) continue;
-      globalMinX = Math.min(globalMinX, p.x - 150);
-      globalMaxX = Math.max(globalMaxX, p.x + 150);
+      globalMinX = Math.min(globalMinX, p.x - p.width / 2 - 60);
+      globalMaxX = Math.max(globalMaxX, p.x + p.width / 2 + 60);
       const cur = byLayer.get(rn.layer);
       if (!cur) {
-        byLayer.set(rn.layer, { minY: p.y - 58, maxY: p.y + 58 });
+        byLayer.set(rn.layer, { minY: p.y - 54, maxY: p.y + 54 });
       } else {
-        cur.minY = Math.min(cur.minY, p.y - 58);
-        cur.maxY = Math.max(cur.maxY, p.y + 58);
+        cur.minY = Math.min(cur.minY, p.y - 54);
+        cur.maxY = Math.max(cur.maxY, p.y + 54);
+      }
+    }
+
+    for (const gb of layout.groupBoxes) {
+      if (!gb.layerId) continue;
+      globalMinX = Math.min(globalMinX, gb.x - 30);
+      globalMaxX = Math.max(globalMaxX, gb.x + gb.width + 30);
+      const cur = byLayer.get(gb.layerId);
+      if (cur) {
+        cur.minY = Math.min(cur.minY, gb.y - 16);
+        cur.maxY = Math.max(cur.maxY, gb.y + gb.height + 12);
       }
     }
 
@@ -206,12 +217,12 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
 
     return Array.from(byLayer.entries()).map(([lid, span]) => ({
       layer: layerMap.get(lid)!,
-      x: globalMinX - 40,
+      x: globalMinX - 36,
       y: span.minY,
-      width: globalMaxX - globalMinX + 80,
+      width: globalMaxX - globalMinX + 72,
       height: span.maxY - span.minY,
     }));
-  }, [layout2DMode, folded.nodes, layout.positions, layerMap]);
+  }, [layout2DMode, folded.nodes, layout.positions, layout.groupBoxes, layerMap]);
 
   const normalizedQuery = searchQuery.trim().toLowerCase();
 
@@ -245,27 +256,60 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
     const tp = layout.positions.get(rl.target);
     if (!sp || !tp) return null;
 
-    const dx = tp.x - sp.x;
-    const dy = tp.y - sp.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const route = layout.linkRoutes.get(rl.id);
 
-    const curveOffset =
-      rl.parallelCount > 1 ? (rl.parallelIndex - (rl.parallelCount - 1) / 2) * 34 : 0;
+    if (route?.sameRow && Math.abs(sp.y - tp.y) < 8) {
+      if (route.arcTrack === 0) {
+        // Direct horizontal neighbor link: connect outer horizontal borders cleanly
+        const leftIsSrc = sp.x <= tp.x;
+        const leftP = leftIsSrc ? sp : tp;
+        const rightP = leftIsSrc ? tp : sp;
+        const x1 = leftP.x + leftP.width / 2;
+        const x2 = rightP.x - rightP.width / 2;
+        const sx = leftIsSrc ? x1 : x2;
+        const tx = leftIsSrc ? x2 : x1;
+        return {
+          d: `M ${sx} ${sp.y} L ${tx} ${tp.y}`,
+          midX: (x1 + x2) / 2,
+          midY: sp.y,
+        };
+      }
 
-    const cx = (sp.x + tp.x) / 2 + nx * curveOffset;
-    const cy = (sp.y + tp.y) / 2 + ny * curveOffset;
+      // Arched horizontal skip-link / parallel link on dedicated non-overlapping track!
+      const sign = Math.sign(route.arcTrack); // +1 = arch above (negative Y), -1 = arch below (positive Y)
+      const level = Math.abs(route.arcTrack);
+      const sx = sp.x + route.sourcePortOffset;
+      const tx = tp.x + route.targetPortOffset;
+      const sy = sp.y - sign * (sp.height / 2);
+      const ty = tp.y - sign * (tp.height / 2);
+      const apexY = sp.y - sign * (sp.height / 2 + 22 + (level - 1) * 24);
 
-    const d =
-      curveOffset === 0
-        ? `M ${sp.x} ${sp.y} L ${tp.x} ${tp.y}`
-        : `M ${sp.x} ${sp.y} Q ${cx} ${cy} ${tp.x} ${tp.y}`;
+      const span = Math.abs(tx - sx);
+      const shoulder = Math.min(54, span * 0.2);
+      const dir = tx >= sx ? 1 : -1;
+      const c1x = sx + dir * shoulder;
+      const c2x = tx - dir * shoulder;
+
+      return {
+        d: `M ${sx} ${sy} C ${c1x} ${apexY}, ${c2x} ${apexY}, ${tx} ${ty}`,
+        midX: (sx + tx) / 2,
+        midY: 0.25 * sy + 0.75 * apexY,
+      };
+    }
+
+    // Inter-subRow or inter-layer link: smooth vertical S-curve exiting top/bottom borders
+    const srcAbove = sp.y < tp.y;
+    const lateral = (route?.arcTrack ?? 0) * 24;
+    const sx = sp.x + (route?.sourcePortOffset ?? 0);
+    const tx = tp.x + (route?.targetPortOffset ?? 0);
+    const sy = srcAbove ? sp.y + sp.height / 2 : sp.y - sp.height / 2;
+    const ty = srcAbove ? tp.y - tp.height / 2 : tp.y + tp.height / 2;
+    const midY = (sy + ty) / 2;
 
     return {
-      d,
-      midX: curveOffset === 0 ? (sp.x + tp.x) / 2 : (sp.x + 2 * cx + tp.x) / 4,
-      midY: curveOffset === 0 ? (sp.y + tp.y) / 2 : (sp.y + 2 * cy + tp.y) / 4,
+      d: `M ${sx} ${sy} C ${sx + lateral} ${midY}, ${tx + lateral} ${midY}, ${tx} ${ty}`,
+      midX: (sx + tx) / 2 + lateral * 0.75,
+      midY,
     };
   };
 
@@ -462,13 +506,18 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
                     : '#2dd4bf'
                   : 'rgba(148, 163, 184, 0.22)';
 
+                const y1 =
+                  upPos.y < lowPos.y ? upPos.y + upPos.height / 2 : upPos.y - upPos.height / 2;
+                const y2 =
+                  upPos.y < lowPos.y ? lowPos.y - lowPos.height / 2 : lowPos.y + lowPos.height / 2;
+
                 return (
                   <line
                     key={`host-${rn.id}-${hostId}`}
                     x1={upPos.x}
-                    y1={upPos.y}
+                    y1={y1}
                     x2={lowPos.x}
-                    y2={lowPos.y}
+                    y2={y2}
                     stroke={stroke}
                     strokeWidth={activePillar ? 2.2 : 1.1}
                     strokeDasharray={activePillar ? '6 4' : '3 5'}
@@ -619,8 +668,8 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
               ? 1
               : baseOpacity;
 
-            const boxW = rn.isCollapsedGroup ? 156 : 142;
-            const boxH = rn.isCollapsedGroup ? 54 : 48;
+            const boxW = pos.width;
+            const boxH = pos.height;
 
             return (
               <g
