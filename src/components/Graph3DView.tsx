@@ -278,6 +278,56 @@ export const Graph3DView: React.FC<Graph3DViewProps> = ({
       const planeTagObj = new CSS2DObject(planeTagEl);
       planeTagObj.position.set(minX + 10, y + 2, maxZ - 6);
       contentGroup.add(planeTagObj);
+
+      // Render Region / Zone / Enclave Sub-Pads on this Layer Plane
+      const regionPads = layout.layerGroupPads.get(layer.id) ?? [];
+      for (const pad of regionPads) {
+        const rxMin = pad.anchorMinX * SCALE_XZ;
+        const rxMax = pad.anchorMaxX * SCALE_XZ;
+        const rzMin = pad.anchorMinZ * SCALE_XZ;
+        const rzMax = pad.anchorMaxZ * SCALE_XZ;
+        const rw = Math.max(24, rxMax - rxMin);
+        const rd = Math.max(24, rzMax - rzMin);
+        const rcx = (rxMin + rxMax) / 2;
+        const rcz = (rzMin + rzMax) / 2;
+        const padColor = pad.group.color ?? layer.color;
+        const padY = y - 3.3 + pad.depth * 0.45;
+
+        const rGeo = new THREE.PlaneGeometry(rw, rd);
+        const rMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(padColor),
+          transparent: true,
+          opacity: isLayerGhost ? 0.03 : pad.depth === 0 ? 0.085 : 0.11,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        });
+        const rMesh = new THREE.Mesh(rGeo, rMat);
+        rMesh.rotation.x = -Math.PI / 2;
+        rMesh.position.set(rcx, padY, rcz);
+        contentGroup.add(rMesh);
+
+        const rBorderGeo = new THREE.EdgesGeometry(rGeo);
+        const rBorderMat = new THREE.LineBasicMaterial({
+          color: new THREE.Color(padColor),
+          transparent: true,
+          opacity: isLayerGhost ? 0.22 : 0.65,
+        });
+        const rBorder = new THREE.LineSegments(rBorderGeo, rBorderMat);
+        rBorder.rotation.x = -Math.PI / 2;
+        rBorder.position.set(rcx, padY + 0.1, rcz);
+        contentGroup.add(rBorder);
+
+        if (showLabels && pad.depth === 0) {
+          const rTagEl = document.createElement('div');
+          rTagEl.className = 'region-3d-tag';
+          rTagEl.style.color = padColor;
+          rTagEl.style.borderColor = padColor;
+          rTagEl.textContent = pad.group.name;
+          const rTagObj = new CSS2DObject(rTagEl);
+          rTagObj.position.set(rcx, padY + 1.5, rzMin + 4);
+          contentGroup.add(rTagObj);
+        }
+      }
     }
 
     const normalizedQuery = searchQuery.trim().toLowerCase();

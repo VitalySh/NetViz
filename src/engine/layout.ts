@@ -12,17 +12,25 @@ export interface NodePosition {
 }
 
 export interface GroupBox {
+  key: string;
   group: GroupSpec;
+  layerId?: string;
   x: number;
   y: number;
   width: number;
   height: number;
-  depth: number; // nesting depth (0 = outer site, 1 = inner rack, etc.)
+  anchorMinX: number;
+  anchorMaxX: number;
+  anchorMinZ: number;
+  anchorMaxZ: number;
+  depth: number; // nesting depth (0 = outer site/region, 1 = inner rack/host, etc.)
 }
 
 export interface ComputedLayout {
   positions: Map<string, NodePosition>;
   groupBoxes: GroupBox[];
+  /** Per-layer region/group pads for 3D planes (and per-band 2D rendering) */
+  layerGroupPads: Map<string, GroupBox[]>;
 }
 
 function getRoleTier(role?: string, type?: string): number {
@@ -369,19 +377,10 @@ export function computeLayout(
     });
   }
 
-  // Step 4: Compute bounding boxes for expanded groups (bottom-up from deepest child groups to parent sites)
+  // Step 4: Compute bounding boxes for expanded groups (both per-layer pads for 3D/swimlanes & combined for 2D anchored)
   const expandedSortedDesc = [...folded.expandedGroups].sort(
     (a, b) => getGroupDepth(b.id) - getGroupDepth(a.id)
   );
-  const groupBoxesMap = new Map<string, GroupBox>();
-
-  // Pre-index direct rendered nodes per groupId
-  const directNodesByGroup = new Map<string, string[]>();
-  for (const rn of renderNodeMap.values()) {
-    if (!rn.group) continue;
-    if (!directNodesByGroup.has(rn.group)) directNodesByGroup.set(rn.group, []);
-    directNodesByGroup.get(rn.group)!.push(rn.id);
-  }
 
   // Pre-index direct child groups per parent groupId
   const childGroupsByParent = new Map<string, string[]>();
@@ -391,53 +390,168 @@ export function computeLayout(
     childGroupsByParent.get(g.parent)!.push(g.id);
   }
 
-  for (const g of expandedSortedDesc) {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minY = Infinity;
-    let maxY = -Infinity;
-    let hasContent = false;
+  // 4a. Compute per-layer group pads (`layerGroupPads`) so multiple regions/zones render cleanly on any layer!
+  const layerGroupPads = new Map<string, GroupBox[]>();
+  for (const lid of activeLayersInFolded) {
+    const padsForLayer = new Map<string, GroupBox>();
+    const layerDirectByGroup = new Map<string, string[]>();
 
-    for (const nid of directNodesByGroup.get(g.id) ?? []) {
-      const pos = positions.get(nid);
-      if (!pos) continue;
-      hasContent = true;
-      minX = Math.min(minX, pos.x - 76);
-      maxX = Math.max(maxX, pos.x + 76);
-      minY = Math.min(minY, pos.y - 36);
-      maxY = Math.max(maxY, pos.y + 36);
+    for (const rn of renderNodeMap.values()) {
+      if (rn.layer !== lid || !rn.group) continue;
+      if (!layerDirectByGroup.has(rn.group)) layerDirectByGroup.set(rn.group, []);
+      layerDirectByGroup.get(rn.group)!.push(rn.id);
     }
 
-    for (const childGid of childGroupsByParent.get(g.id) ?? []) {
-      const childBox = groupBoxesMap.get(childGid);
-      if (childBox) {
+    for (const g of expandedSortedDesc) {
+      // If group explicitly pins a different layer, skip unless its children have nodes here
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let minAX = Infinity;
+      let maxAX = -Infinity;
+      let minAZ = Infinity;
+      let maxAZ = -Infinity;
+      let hasContent = false;
+
+      for (const nid of layerDirectByGroup.get(g.id) ?? []) {
+        const pos = positions.get(nid);
+        if (!pos) continue;
         hasContent = true;
-        minX = Math.min(minX, childBox.x);
-        maxX = Math.max(maxX, childBox.x + childBox.width);
-        minY = Math.min(minY, childBox.y);
-        maxY = Math.max(maxY, childBox.y + childBox.height);
+        minX = Math.min(minX, pos.x - 76);
+        maxX = Math.max(maxX, pos.x + 76);
+        minY = Math.min(minY, pos.y - 34);
+        maxY = Math.max(maxY, pos.y + 34);
+        minAX = Math.min(minAX, pos.anchorX - 76);
+        maxAX = Math.max(maxAX, pos.anchorX + 76);
+        minAZ = Math.min(minAZ, pos.anchorZ - 48);
+        maxAZ = Math.max(maxAZ, pos.anchorZ + 48);
       }
+
+      for (const childGid of childGroupsByParent.get(g.id) ?? []) {
+        const childBox = padsForLayer.get(childGid);
+        if (childBox) {
+          hasContent = true;
+          minX = Math.min(minX, childBox.x);
+          maxX = Math.max(maxX, childBox.x + childBox.width);
+          minY = Math.min(minY, childBox.y);
+          maxY = Math.max(maxY, childBox.y + childBox.height);
+          minAX = Math.min(minAX, childBox.anchorMinX);
+          maxAX = Math.max(maxAX, childBox.anchorMaxX);
+          minAZ = Math.min(minAZ, childBox.anchorMinZ);
+          maxAZ = Math.max(maxAZ, childBox.anchorMaxZ);
+        }
+      }
+
+      if (!hasContent) continue;
+
+      const depth = getGroupDepth(g.id);
+      const padX = depth === 0 ? 30 : 20;
+      const padTop = depth === 0 ? 36 : 28;
+      const padBottom = depth === 0 ? 24 : 18;
+
+      padsForLayer.set(g.id, {
+        key: `${lid}::${g.id}`,
+        group: g,
+        layerId: lid,
+        x: minX - padX,
+        y: minY - padTop,
+        width: maxX - minX + padX * 2,
+        height: maxY - minY + padTop + padBottom,
+        anchorMinX: minAX - padX,
+        anchorMaxX: maxAX + padX,
+        anchorMinZ: minAZ - padBottom,
+        anchorMaxZ: maxAZ + padTop,
+        depth,
+      });
     }
 
-    if (!hasContent) continue;
-
-    const depth = getGroupDepth(g.id);
-    const padX = depth === 0 ? 34 : 22;
-    const padTop = depth === 0 ? 40 : 32;
-    const padBottom = depth === 0 ? 28 : 20;
-
-    groupBoxesMap.set(g.id, {
-      group: g,
-      x: minX - padX,
-      y: minY - padTop,
-      width: maxX - minX + padX * 2,
-      height: maxY - minY + padTop + padBottom,
-      depth,
-    });
+    layerGroupPads.set(
+      lid,
+      Array.from(padsForLayer.values()).sort((a, b) => a.depth - b.depth)
+    );
   }
 
-  // Sort outer groups first so outer containers render behind inner racks
-  const groupBoxes = Array.from(groupBoxesMap.values()).sort((a, b) => a.depth - b.depth);
+  // 4b. For 2D: in `swimlanes` mode use per-layer boxes so multi-layer regions stay neatly inside each swimlane;
+  // in `anchored` mode combine across layers so a region wraps its whole vertical hardware+VM stack.
+  let groupBoxes: GroupBox[] = [];
+  if (mode2D === 'swimlanes') {
+    groupBoxes = Array.from(layerGroupPads.values())
+      .flat()
+      .sort((a, b) => a.depth - b.depth);
+  } else {
+    const combinedMap = new Map<string, GroupBox>();
+    const directNodesByGroup = new Map<string, string[]>();
+    for (const rn of renderNodeMap.values()) {
+      if (!rn.group) continue;
+      if (!directNodesByGroup.has(rn.group)) directNodesByGroup.set(rn.group, []);
+      directNodesByGroup.get(rn.group)!.push(rn.id);
+    }
 
-  return { positions, groupBoxes };
+    for (const g of expandedSortedDesc) {
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      let minAX = Infinity;
+      let maxAX = -Infinity;
+      let minAZ = Infinity;
+      let maxAZ = -Infinity;
+      let hasContent = false;
+
+      for (const nid of directNodesByGroup.get(g.id) ?? []) {
+        const pos = positions.get(nid);
+        if (!pos) continue;
+        hasContent = true;
+        minX = Math.min(minX, pos.x - 76);
+        maxX = Math.max(maxX, pos.x + 76);
+        minY = Math.min(minY, pos.y - 36);
+        maxY = Math.max(maxY, pos.y + 36);
+        minAX = Math.min(minAX, pos.anchorX - 76);
+        maxAX = Math.max(maxAX, pos.anchorX + 76);
+        minAZ = Math.min(minAZ, pos.anchorZ - 48);
+        maxAZ = Math.max(maxAZ, pos.anchorZ + 48);
+      }
+
+      for (const childGid of childGroupsByParent.get(g.id) ?? []) {
+        const childBox = combinedMap.get(childGid);
+        if (childBox) {
+          hasContent = true;
+          minX = Math.min(minX, childBox.x);
+          maxX = Math.max(maxX, childBox.x + childBox.width);
+          minY = Math.min(minY, childBox.y);
+          maxY = Math.max(maxY, childBox.y + childBox.height);
+          minAX = Math.min(minAX, childBox.anchorMinX);
+          maxAX = Math.max(maxAX, childBox.anchorMaxX);
+          minAZ = Math.min(minAZ, childBox.anchorMinZ);
+          maxAZ = Math.max(maxAZ, childBox.anchorMaxZ);
+        }
+      }
+
+      if (!hasContent) continue;
+
+      const depth = getGroupDepth(g.id);
+      const padX = depth === 0 ? 34 : 22;
+      const padTop = depth === 0 ? 40 : 32;
+      const padBottom = depth === 0 ? 28 : 20;
+
+      combinedMap.set(g.id, {
+        key: g.id,
+        group: g,
+        x: minX - padX,
+        y: minY - padTop,
+        width: maxX - minX + padX * 2,
+        height: maxY - minY + padTop + padBottom,
+        anchorMinX: minAX - padX,
+        anchorMaxX: maxAX + padX,
+        anchorMinZ: minAZ - padBottom,
+        anchorMaxZ: maxAZ + padTop,
+        depth,
+      });
+    }
+
+    groupBoxes = Array.from(combinedMap.values()).sort((a, b) => a.depth - b.depth);
+  }
+
+  return { positions, groupBoxes, layerGroupPads };
 }

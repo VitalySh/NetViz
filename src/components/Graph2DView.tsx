@@ -390,7 +390,7 @@ export const Graph2DView: React.FC<Graph2DViewProps> = ({
           {layout.groupBoxes.map((gb) => {
             const gColor = gb.group.color ?? '#64748b';
             return (
-              <g key={`gbox-${gb.group.id}`}>
+              <g key={`gbox-${gb.key}`}>
                 <rect
                   x={gb.x}
                   y={gb.y}
