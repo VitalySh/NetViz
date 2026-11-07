@@ -5,6 +5,7 @@ import {
   ArrowUpCircle,
   CheckCircle2,
   Compass,
+  PanelRightClose,
   X,
   Zap,
   ZapOff,
@@ -24,6 +25,7 @@ interface InspectorPanelProps {
   sim: FailureSimulationState;
   onToggleFailNode: (nodeId: string) => void;
   onToggleFailLink: (linkId: string) => void;
+  onCollapse: () => void;
 }
 
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
@@ -36,6 +38,7 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   sim,
   onToggleFailNode,
   onToggleFailLink,
+  onCollapse,
 }) => {
   const layerMap = new Map(config.layers.map((l) => [l.id, l]));
   const nodeMap = new Map(config.nodes.map((n) => [n.id, n]));
@@ -78,6 +81,14 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
         <div className="panel-section">
           <div className="section-header">
             <span>Topology Overview</span>
+            <button
+              className="mini-btn"
+              onClick={onCollapse}
+              title="Collapse Inspector panel"
+              style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px' }}
+            >
+              <PanelRightClose size={12} />
+            </button>
           </div>
           <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>
             {config.metadata.name}
@@ -234,9 +245,19 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
                 {rNode?.label ?? rawNode?.label ?? selection.id}
               </div>
             </div>
-            <button className="mini-btn" onClick={() => onSelect(null)} title="Clear selection">
-              <X size={13} />
-            </button>
+            <div className="mini-btn-row">
+              <button className="mini-btn" onClick={() => onSelect(null)} title="Clear selection">
+                <X size={13} />
+              </button>
+              <button
+                className="mini-btn"
+                onClick={onCollapse}
+                title="Collapse Inspector panel"
+                style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px' }}
+              >
+                <PanelRightClose size={13} />
+              </button>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
@@ -442,9 +463,19 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
               </div>
             )}
           </div>
-          <button className="mini-btn" onClick={() => onSelect(null)}>
-            <X size={13} />
-          </button>
+          <div className="mini-btn-row">
+            <button className="mini-btn" onClick={() => onSelect(null)} title="Clear selection">
+              <X size={13} />
+            </button>
+            <button
+              className="mini-btn"
+              onClick={onCollapse}
+              title="Collapse Inspector panel"
+              style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px' }}
+            >
+              <PanelRightClose size={13} />
+            </button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>

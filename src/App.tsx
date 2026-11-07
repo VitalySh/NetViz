@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Layers, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { TopBar, type ViewMode } from './components/TopBar';
 import { LayerStackPanel } from './components/LayerStackPanel';
 import { Graph2DView } from './components/Graph2DView';
@@ -26,6 +27,9 @@ export const App: React.FC = () => {
   const [layout2DMode, setLayout2DMode] = useState<Layout2DMode>('swimlanes');
   const [yamlDrawerOpen, setYamlDrawerOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [topBarCollapsed, setTopBarCollapsed] = useState<boolean>(false);
+  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState<boolean>(false);
+  const [rightPanelCollapsed, setRightPanelCollapsed] = useState<boolean>(false);
 
   const [layerModes, setLayerModes] = useState<Map<string, LayerVisibilityMode>>(new Map());
   const [soloLayerId, setSoloLayerId] = useState<string | null>(null);
@@ -319,38 +323,81 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-shell">
-      <TopBar
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        activeSourceLabel={activeSourceLabel}
-        isWatchingLocal={isWatchingLocal}
-        availableServerFiles={availableServerFiles}
-        onSelectBuiltin={handleSelectBuiltin}
-        onSelectServerFile={handleSelectServerFile}
-        onImportLocalFile={handleImportLocalFile}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        failedCount={failedCount}
-        onResetFailures={handleResetFailures}
-        yamlDrawerOpen={yamlDrawerOpen}
-        onToggleYamlDrawer={() => setYamlDrawerOpen((v) => !v)}
-      />
+      {!topBarCollapsed ? (
+        <TopBar
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          activeSourceLabel={activeSourceLabel}
+          isWatchingLocal={isWatchingLocal}
+          availableServerFiles={availableServerFiles}
+          onSelectBuiltin={handleSelectBuiltin}
+          onSelectServerFile={handleSelectServerFile}
+          onImportLocalFile={handleImportLocalFile}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          failedCount={failedCount}
+          onResetFailures={handleResetFailures}
+          yamlDrawerOpen={yamlDrawerOpen}
+          onToggleYamlDrawer={() => setYamlDrawerOpen((v) => !v)}
+          leftPanelCollapsed={leftPanelCollapsed}
+          onToggleLeftPanel={() => setLeftPanelCollapsed((v) => !v)}
+          rightPanelCollapsed={rightPanelCollapsed}
+          onToggleRightPanel={() => setRightPanelCollapsed((v) => !v)}
+          onCollapseTopBar={() => setTopBarCollapsed(true)}
+        />
+      ) : (
+        <button
+          className="collapsed-topbar-tab"
+          onClick={() => setTopBarCollapsed(false)}
+          title="Expand top bar"
+        >
+          <Layers size={13} color="#38bdf8" />
+          <span>NetViz</span>
+          {failedCount > 0 && (
+            <span
+              style={{
+                background: 'rgba(239, 68, 68, 0.25)',
+                color: '#fca5a5',
+                border: '1px solid rgba(239, 68, 68, 0.5)',
+                borderRadius: 999,
+                padding: '0 6px',
+                fontSize: 10.5,
+              }}
+            >
+              {failedCount} down
+            </span>
+          )}
+          <ChevronDown size={13} />
+        </button>
+      )}
 
       <div className="workspace-body">
-        <LayerStackPanel
-          config={activeConfig}
-          resolution={resolution}
-          layerModes={effectiveLayerModes}
-          soloLayerId={soloLayerId}
-          ghostPhysicalOnSolo={ghostPhysicalOnSolo}
-          onSetLayerMode={handleSetLayerMode}
-          onToggleSoloLayer={handleToggleSoloLayer}
-          onToggleGhostPhysicalOnSolo={() => setGhostPhysicalOnSolo((v) => !v)}
-          onShowAllLayers={handleShowAllLayers}
-          collapsedGroupIds={collapsedGroupIds}
-          onToggleGroupCollapse={handleToggleGroupCollapse}
-          onCollapseByType={handleCollapseByType}
-        />
+        {!leftPanelCollapsed ? (
+          <LayerStackPanel
+            config={activeConfig}
+            resolution={resolution}
+            layerModes={effectiveLayerModes}
+            soloLayerId={soloLayerId}
+            ghostPhysicalOnSolo={ghostPhysicalOnSolo}
+            onSetLayerMode={handleSetLayerMode}
+            onToggleSoloLayer={handleToggleSoloLayer}
+            onToggleGhostPhysicalOnSolo={() => setGhostPhysicalOnSolo((v) => !v)}
+            onShowAllLayers={handleShowAllLayers}
+            collapsedGroupIds={collapsedGroupIds}
+            onToggleGroupCollapse={handleToggleGroupCollapse}
+            onCollapseByType={handleCollapseByType}
+            onCollapse={() => setLeftPanelCollapsed(true)}
+          />
+        ) : (
+          <button
+            className="collapsed-side-tab left"
+            onClick={() => setLeftPanelCollapsed(false)}
+            title="Expand Layer Stack panel"
+          >
+            <PanelLeftOpen size={15} />
+            <span className="collapsed-side-label">Layers</span>
+          </button>
+        )}
 
         <main className="viewport-area">
           {(viewMode === '2d' || viewMode === 'split') && (
@@ -399,17 +446,40 @@ export const App: React.FC = () => {
           />
         </main>
 
-        <InspectorPanel
-          config={activeConfig}
-          resolution={resolution}
-          folded={folded}
-          selection={selection}
-          onSelect={setSelection}
-          trace={trace}
-          sim={sim}
-          onToggleFailNode={handleToggleFailNode}
-          onToggleFailLink={handleToggleFailLink}
-        />
+        {!rightPanelCollapsed ? (
+          <InspectorPanel
+            config={activeConfig}
+            resolution={resolution}
+            folded={folded}
+            selection={selection}
+            onSelect={setSelection}
+            trace={trace}
+            sim={sim}
+            onToggleFailNode={handleToggleFailNode}
+            onToggleFailLink={handleToggleFailLink}
+            onCollapse={() => setRightPanelCollapsed(true)}
+          />
+        ) : (
+          <button
+            className="collapsed-side-tab right"
+            onClick={() => setRightPanelCollapsed(false)}
+            title="Expand Inspector panel"
+          >
+            <PanelRightOpen size={15} />
+            {selection && (
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: '#38bdf8',
+                  boxShadow: '0 0 6px #38bdf8',
+                }}
+              />
+            )}
+            <span className="collapsed-side-label">Inspector</span>
+          </button>
+        )}
       </div>
     </div>
   );

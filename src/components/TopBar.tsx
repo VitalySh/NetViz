@@ -1,11 +1,16 @@
 import React, { useRef } from 'react';
 import {
   Box,
+  ChevronUp,
   Code2,
   Columns2,
   FolderOpen,
   Layers,
   Network,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   RotateCcw,
   Search,
   ZapOff,
@@ -29,6 +34,11 @@ interface TopBarProps {
   onResetFailures: () => void;
   yamlDrawerOpen: boolean;
   onToggleYamlDrawer: () => void;
+  leftPanelCollapsed: boolean;
+  onToggleLeftPanel: () => void;
+  rightPanelCollapsed: boolean;
+  onToggleRightPanel: () => void;
+  onCollapseTopBar: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -46,6 +56,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   onResetFailures,
   yamlDrawerOpen,
   onToggleYamlDrawer,
+  leftPanelCollapsed,
+  onToggleLeftPanel,
+  rightPanelCollapsed,
+  onToggleRightPanel,
+  onCollapseTopBar,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,6 +99,14 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="topbar">
       <div className="topbar-group">
+        <button
+          className={`icon-btn ${!leftPanelCollapsed ? 'active' : ''}`}
+          onClick={onToggleLeftPanel}
+          title={leftPanelCollapsed ? 'Expand Layer Stack panel' : 'Collapse Layer Stack panel'}
+        >
+          {leftPanelCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
+
         <div className="brand-badge">
           <div className="brand-icon">
             <Layers size={16} />
@@ -205,6 +228,22 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <Code2 size={14} />
           <span>YAML Source</span>
+        </button>
+
+        <button
+          className={`icon-btn ${!rightPanelCollapsed ? 'active' : ''}`}
+          onClick={onToggleRightPanel}
+          title={rightPanelCollapsed ? 'Expand Inspector panel' : 'Collapse Inspector panel'}
+        >
+          {rightPanelCollapsed ? <PanelRightOpen size={15} /> : <PanelRightClose size={15} />}
+        </button>
+
+        <button
+          className="icon-btn"
+          onClick={onCollapseTopBar}
+          title="Collapse top bar"
+        >
+          <ChevronUp size={15} />
         </button>
       </div>
     </header>

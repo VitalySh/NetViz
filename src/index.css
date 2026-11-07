@@ -48,6 +48,7 @@ textarea {
   flex-direction: column;
   width: 100%;
   height: 100%;
+  position: relative;
 }
 
 .topbar {
@@ -254,6 +255,110 @@ textarea {
 
 .split-pane + .split-pane {
   border-left: 1px solid var(--border-subtle);
+}
+
+/* Collapsible Bar & Side Panel Edge Handles */
+.icon-btn {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel-elevated);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.icon-btn.active {
+  color: var(--accent-cyan);
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(14, 165, 233, 0.14);
+}
+
+.collapsed-topbar-tab {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  background: rgba(12, 19, 34, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  border-top: none;
+  border-radius: 0 0 9px 9px;
+  padding: 4px 12px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: all 0.15s ease;
+}
+
+.collapsed-topbar-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-cyan);
+  background: rgba(19, 28, 49, 0.96);
+}
+
+.collapsed-side-tab {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 25;
+  background: rgba(12, 19, 34, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: all 0.15s ease;
+}
+
+.collapsed-side-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-cyan);
+  background: rgba(19, 28, 49, 0.96);
+}
+
+.collapsed-side-tab.left {
+  left: 0;
+  border-left: none;
+  border-radius: 0 9px 9px 0;
+}
+
+.collapsed-side-tab.right {
+  right: 0;
+  border-right: none;
+  border-radius: 9px 0 0 9px;
+}
+
+.collapsed-side-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* Section Headers */

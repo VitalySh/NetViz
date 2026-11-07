@@ -7,6 +7,7 @@ import {
   FolderMinus,
   FolderPlus,
   Ghost,
+  PanelLeftClose,
   Sparkles,
 } from 'lucide-react';
 import type {
@@ -29,6 +30,7 @@ interface LayerStackPanelProps {
   collapsedGroupIds: Set<string>;
   onToggleGroupCollapse: (groupId: string) => void;
   onCollapseByType: (groupType: string | 'all' | 'none') => void;
+  onCollapse: () => void;
 }
 
 export const LayerStackPanel: React.FC<LayerStackPanelProps> = ({
@@ -44,6 +46,7 @@ export const LayerStackPanel: React.FC<LayerStackPanelProps> = ({
   collapsedGroupIds,
   onToggleGroupCollapse,
   onCollapseByType,
+  onCollapse,
 }) => {
   // Display highest overlay layer at the top down to Physical Layer 0 at the bottom
   const layersTopDown = [...config.layers].sort((a, b) => b.order - a.order);
@@ -136,9 +139,19 @@ export const LayerStackPanel: React.FC<LayerStackPanelProps> = ({
       <div className="panel-section">
         <div className="section-header">
           <span>Network Layer Stack ({config.layers.length})</span>
-          <button className="mini-btn" onClick={onShowAllLayers} title="Reset all layers to Visible">
-            Show All
-          </button>
+          <div className="mini-btn-row">
+            <button className="mini-btn" onClick={onShowAllLayers} title="Reset all layers to Visible">
+              Show All
+            </button>
+            <button
+              className="mini-btn"
+              onClick={onCollapse}
+              title="Collapse Layer Stack panel"
+              style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 5px' }}
+            >
+              <PanelLeftClose size={12} />
+            </button>
+          </div>
         </div>
 
         {layersTopDown.map((layer) => {
